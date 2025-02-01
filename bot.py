@@ -1,6 +1,7 @@
 import os
 import requests
 import logging
+from bs4 import BeautifulSoup
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -14,9 +15,34 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ensure this matches the environment variab
 # Function to bypass URL shortener
 def bypass_url_shortener(short_url):
     try:
-        # Follow all redirects and get the final URL
-        response = requests.get(short_url, allow_redirects=True)
-        return response.url  # This is the final destination URL
+        # Fetch the intermediate page
+        response = requests.get(short_url, allow_redirects=False)
+        
+        # If it's a direct redirect, return the final URL
+        if response.status_code in (301, 302, 303, 307, 308):
+            return response.headers['Location']
+        
+        # If it's an intermediate page, parse the HTML to find the final URL
+        soup = BeautifulSoup(response.text, 'lxml')
+        
+        # Look for a meta refresh tag or JavaScript redirect
+        meta_refresh = soup.find('meta', attrs={'http-equiv': 'refresh'})
+        if meta_refresh:
+            # Extract the URL from the content attribute
+            content = meta_refresh.get('content', '')
+            if 'url=' in content:
+                return content.split('url=')[1]
+        
+        # Look for a JavaScript redirect
+        script = soup.find('script', text=lambda x: x and 'window.location' in x)
+        if script:
+            # Extract the URL from the JavaScript code
+            script_text = script.string
+            if 'window.location' in script_text:
+                return script_text.split('window.location=')[1].split(';')[0].strip("'\"")
+        
+        # If no redirect is found, return the intermediate URL
+        return short_url
     except requests.exceptions.RequestException as e:
         return f"An error occurred: {e}"
 
