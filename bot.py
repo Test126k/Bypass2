@@ -48,5 +48,5 @@ if __name__ == "__main__":
         listen="0.0.0.0",  # Listen on all available interfaces
         port=int(os.getenv("PORT", 8080)),  # Use the PORT environment variable or default to 8080
         url_path=BOT_TOKEN,  # URL path for the webhook
-        webhook_url=f"https://<YOUR_KOYEB_PUBLIC_URL>/{BOT_TOKEN}"  # Replace with your Koyeb public URL
+        webhook_url=f"https://github.com/Test126k/Bypass2>/{BOT_TOKEN}"  # Replace with your Koyeb public URL
     )
