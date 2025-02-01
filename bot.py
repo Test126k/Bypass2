@@ -1,8 +1,10 @@
+import os
+import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import os
 
-BOT_TOKEN = os.getenv("8053602470:AAECsWw8LDZNS7M1xesopgylsozdJcPQwnw")  # Get the token from environment variables
+# Read the bot token from the environment variable
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ensure this matches the environment variable name in Koyeb
 
 # Function to bypass URL shortener
 def bypass_url_shortener(short_url):
@@ -30,6 +32,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Main function to run the bot
 if __name__ == "__main__":
+    # Check if the bot token is set
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN environment variable is not set!")
+
+    # Build the application
     app = Application.builder().token(BOT_TOKEN).build()
 
     # Add handlers
@@ -38,8 +45,8 @@ if __name__ == "__main__":
 
     # Set up webhook
     app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 8080)),
-        url_path=BOT_TOKEN,
-        webhook_url=f"https://<YOUR_KOYEB_PUBLIC_URL>/{BOT_TOKEN}"
+        listen="0.0.0.0",  # Listen on all available interfaces
+        port=int(os.getenv("PORT", 8080)),  # Use the PORT environment variable or default to 8080
+        url_path=BOT_TOKEN,  # URL path for the webhook
+        webhook_url=f"https://<YOUR_KOYEB_PUBLIC_URL>/{BOT_TOKEN}"  # Replace with your Koyeb public URL
     )
