@@ -2,7 +2,7 @@ import os
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 
 # Enable logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -11,25 +11,25 @@ logger = logging.getLogger(__name__)
 # Read the bot token from the environment variable
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ensure this matches the environment variable name in Koyeb
 
-# Function to bypass URL shortener using Playwright
-def bypass_url_shortener(short_url):
+# Function to bypass URL shortener using Playwright (async)
+async def bypass_url_shortener(short_url):
     try:
-        with sync_playwright() as p:
+        async with async_playwright() as p:
             # Launch a headless browser
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
             
             # Navigate to the shortened URL
-            page.goto(short_url)
+            await page.goto(short_url)
             
             # Wait for the page to fully load (including JavaScript redirects)
-            page.wait_for_timeout(5000)  # Wait for 5 seconds
+            await page.wait_for_timeout(5000)  # Wait for 5 seconds
             
             # Get the final URL after all redirects
             final_url = page.url
             
             # Close the browser
-            browser.close()
+            await browser.close()
             
             return final_url
     except Exception as e:
@@ -45,7 +45,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     logger.info(f"User {update.message.from_user.id} sent: {text}")
     if text.startswith(("http://", "https://")):
-        original_url = bypass_url_shortener(text)
+        original_url = await bypass_url_shortener(text)
         await update.message.reply_text(f"Original URL: {original_url}")
     else:
         await update.message.reply_text("Please send a valid shortened URL.")
