@@ -14,11 +14,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ensure this matches the environment variab
 # Function to bypass URL shortener
 def bypass_url_shortener(short_url):
     try:
-        response = requests.get(short_url, allow_redirects=False)
-        if response.status_code in (301, 302, 303, 307, 308):
-            return response.headers['Location']
-        else:
-            return "No redirect found. This might not be a shortened URL."
+        # Follow all redirects and get the final URL
+        response = requests.get(short_url, allow_redirects=True)
+        return response.url  # This is the final destination URL
     except requests.exceptions.RequestException as e:
         return f"An error occurred: {e}"
 
