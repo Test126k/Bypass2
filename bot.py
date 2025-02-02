@@ -1,9 +1,9 @@
 import os
 import logging
-import requests
-from bs4 import BeautifulSoup
-from telegram import Update
+import sqlite3
+from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from bypass import bypass_url  # Import the bypass function
 
 # Enable logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -11,90 +11,84 @@ logger = logging.getLogger(__name__)
 
 # Read the bot token from the environment variable
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ensure this matches the environment variable name in Koyeb
+CHANNEL_ID = "@master_bypass"  # Replace with your Telegram channel username
 
-# Function to bypass URL shortener
-def bypass_url_shortener(short_url):
-    try:
-        import requests
-        from bs4 import BeautifulSoup
-        import re
+# Database setup
+conn = sqlite3.connect("bot.db", check_same_thread=False)
+cursor = conn.cursor()
+cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, is_banned BOOLEAN, is_premium BOOLEAN)")
+cursor.execute("CREATE TABLE IF NOT EXISTS links (short_url TEXT PRIMARY KEY, original_url TEXT)")
+conn.commit()
 
-        # Direct Redirect Handling
-        response = requests.get(short_url, allow_redirects=True)
-        if response.status_code in (301, 302, 303, 307, 308):
-            return response.url  # Direct Redirect
+# Function to check if a link is already bypassed
+async def get_cached_link(short_url):
+    bot = Bot(token=BOT_TOKEN)
+    async for message in bot.get_chat_history(CHANNEL_ID):
+        if short_url in message.text:
+            return message.text.split("Original URL: ")[1]
+    return None
 
-        # Agar direct redirect nahi mila to HTML parse karo
-        soup = BeautifulSoup(response.text, "lxml")
-
-        # Meta Refresh Handling
-        meta_refresh = soup.find("meta", attrs={"http-equiv": "refresh"})
-        if meta_refresh:
-            content = meta_refresh.get("content", "")
-            url_part = content.split("url=")[-1] if "url=" in content else None
-            if url_part:
-                return url_part.strip()
-
-        # JavaScript Redirect Handling
-        script = soup.find("script", text=lambda x: x and "window.location" in x)
-        if script:
-            match = re.search(r'window\.location\s*=\s*["\'](.*?)["\']', script.text)
-            if match:
-                return match.group(1)
-
-        # Agar kuch bhi na mile to original URL return karo
-        return short_url
-
-    except requests.exceptions.RequestException as e:
-        return f"An error occurred: {e}"
-
-        
-        # If it's a direct redirect, return the final URL
-        if response.status_code in (301, 302, 303, 307, 308):
-            return response.headers['Location']
-        
-        # If it's an intermediate page, parse the HTML to find the final URL
-        soup = BeautifulSoup(response.text, 'lxml')
-        
-        # Look for a meta refresh tag
-        meta_refresh = soup.find('meta', attrs={'http-equiv': 'refresh'})
-        if meta_refresh:
-            # Extract the URL from the content attribute
-            content = meta_refresh.get('content', '')
-            if 'url=' in content:
-                return content.split('url=')[1]
-        
-        # Look for a JavaScript redirect
-        script = soup.find('script', text=lambda x: x and 'window.location' in x)
-        if script:
-            # Extract the URL from the JavaScript code
-            script_text = script.string
-            if 'window.location' in script_text:
-                return script_text.split('window.location=')[1].split(';')[0].strip("'\"")
-        
-        # If no redirect is found, return the intermediate URL
-        return short_url
-    except requests.exceptions.RequestException as e:
-        return f"An error occurred: {e}"
+# Function to cache a bypassed link in the Telegram channel
+async def cache_link(short_url, original_url):
+    bot = Bot(token=BOT_TOKEN)
+    await bot.send_message(CHANNEL_ID, f"Short URL: {short_url}\nOriginal URL: {original_url}")
 
 # Command handler for /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"User {update.message.from_user.id} sent /start")
+    user_id = update.message.from_user.id
+    cursor.execute("INSERT OR IGNORE INTO users (user_id, is_banned, is_premium) VALUES (?, ?, ?)", (user_id, False, False))
+    conn.commit()
     await update.message.reply_text("Hello! Send me a shortened URL, and I'll reveal the original URL for you.")
 
 # Message handler for URLs
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
     text = update.message.text
-    logger.info(f"User {update.message.from_user.id} sent: {text}")
+
+    # Check if the user is banned
+    cursor.execute("SELECT is_banned FROM users WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if result and result[0]:
+        await update.message.reply_text("You are banned from using this bot.")
+        return
+
     if text.startswith(("http://", "https://")):
-        # Check if the URL is from inshorturl.com
-        if "inshorturl.com" in text:
-            original_url = bypass_url_shortener(text)
-            await update.message.reply_text(f"Original URL: {original_url}")
-        else:
-            await update.message.reply_text("Sorry, I only support inshorturl.com links for now.")
+        # Check if the link is already cached
+        cached_link = await get_cached_link(text)
+        if cached_link:
+            await update.message.reply_text(f"Original URL (cached): {cached_link}")
+            return
+
+        # Bypass the URL
+        original_url = bypass_url(text)
+        await update.message.reply_text(f"Original URL: {original_url}")
+        await cache_link(text, original_url)
     else:
         await update.message.reply_text("Please send a valid shortened URL.")
+
+# Command handler for /ban (admin only)
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id != YOUR_ADMIN_USER_ID:  # Replace with your admin user ID
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
+
+    target_user_id = int(context.args[0])
+    cursor.execute("UPDATE users SET is_banned = ? WHERE user_id = ?", (True, target_user_id))
+    conn.commit()
+    await update.message.reply_text(f"User {target_user_id} has been banned.")
+
+# Command handler for /unban (admin only)
+async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id != YOUR_ADMIN_USER_ID:  # Replace with your admin user ID
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
+
+    target_user_id = int(context.args[0])
+    cursor.execute("UPDATE users SET is_banned = ? WHERE user_id = ?", (False, target_user_id))
+    conn.commit()
+    await update.message.reply_text(f"User {target_user_id} has been unbanned.")
 
 # Main function to run the bot
 if __name__ == "__main__":
@@ -107,6 +101,8 @@ if __name__ == "__main__":
 
     # Add handlers
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("ban", ban_user))
+    app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Log the webhook URL
