@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Read the bot token from the environment variable
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ensure this matches the environment variable name in Koyeb
 
-# Function to bypass URL shortener using requests and BeautifulSoup
+# Function to bypass URL shortener
 def bypass_url_shortener(short_url):
     try:
         # Fetch the intermediate page
@@ -56,8 +56,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     logger.info(f"User {update.message.from_user.id} sent: {text}")
     if text.startswith(("http://", "https://")):
-        original_url = bypass_url_shortener(text)
-        await update.message.reply_text(f"Original URL: {original_url}")
+        # Check if the URL is from inshorturl.com
+        if "inshorturl.com" in text:
+            original_url = bypass_url_shortener(text)
+            await update.message.reply_text(f"Original URL: {original_url}")
+        else:
+            await update.message.reply_text("Sorry, I only support inshorturl.com links for now.")
     else:
         await update.message.reply_text("Please send a valid shortened URL.")
 
