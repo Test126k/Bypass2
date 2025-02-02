@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 
 # Function to bypass URL shortener for inshorturl.com
-def bypass_inshorturl(short_url):
+def bypass_url_shortener():
     try:
         response = requests.get(short_url, allow_redirects=False)
         if response.status_code in (301, 302, 303, 307, 308):
