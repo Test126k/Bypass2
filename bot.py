@@ -3,14 +3,14 @@ import logging
 import sqlite3
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from bypass import bypass_url  # Import the bypass function
+from bypass import bypass_url_shortener  # Fixed function name
 
 # Enable logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Read the bot token from the environment variable
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ensure this matches the environment variable name in Koyeb
+BOT_TOKEN = os.getenv("BOT_TOKEN")  
 CHANNEL_ID = "@master_bypass"  # Replace with your Telegram channel username
 
 # Database setup
@@ -53,16 +53,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if text.startswith(("http://", "https://")):
-        # Check if the link is already cached
-        cached_link = await get_cached_link(text)
-        if cached_link:
-            await update.message.reply_text(f"Original URL (cached): {cached_link}")
-            return
+        try:
+            # Check if the link is already cached
+            cached_link = await get_cached_link(text)
+            if cached_link:
+                await update.message.reply_text(f"Original URL (cached): {cached_link}")
+                return
 
-        # Bypass the URL
-        original_url = bypass_url(text)
-        await update.message.reply_text(f"Original URL: {original_url}")
-        await cache_link(text, original_url)
+            # Bypass the URL
+            original_url = bypass_url_shortener(text)  # Fix function name
+            await update.message.reply_text(f"Original URL: {original_url}")
+            await cache_link(text, original_url)
+
+        except Exception as e:
+            await update.message.reply_text(f"Error: {str(e)}")
+
     else:
         await update.message.reply_text("Please send a valid shortened URL.")
 
@@ -92,11 +97,9 @@ async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Main function to run the bot
 if __name__ == "__main__":
-    # Check if the bot token is set
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN environment variable is not set!")
 
-    # Build the application
     app = Application.builder().token(BOT_TOKEN).build()
 
     # Add handlers
@@ -105,14 +108,14 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Log the webhook URL
-    webhook_url = f"https://willowy-cindy-arman1269-4ca980f1.koyeb.app/{BOT_TOKEN}"  # Replace with your Koyeb public URL
+    # Koyeb Webhook URL
+    webhook_url = f"https://your-koyeb-url.koyeb.app/{BOT_TOKEN}"  # Replace with your Koyeb public URL
     logger.info(f"Setting webhook URL: {webhook_url}")
 
     # Set up webhook
     app.run_webhook(
-        listen="0.0.0.0",  # Listen on all available interfaces
-        port=int(os.getenv("PORT", 8080)),  # Use the PORT environment variable or default to 8080
-        url_path=BOT_TOKEN,  # URL path for the webhook
-        webhook_url=webhook_url  # Replace with your Koyeb public URL
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 8080)),  
+        url_path=BOT_TOKEN,
+        webhook_url=webhook_url  
     )
