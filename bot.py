@@ -15,8 +15,39 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ensure this matches the environment variab
 # Function to bypass URL shortener
 def bypass_url_shortener(short_url):
     try:
-        # Fetch the intermediate page
-        response = requests.get(short_url, allow_redirects=False)
+        import requests
+        from bs4 import BeautifulSoup
+        import re
+
+        # Direct Redirect Handling
+        response = requests.get(short_url, allow_redirects=True)
+        if response.status_code in (301, 302, 303, 307, 308):
+            return response.url  # Direct Redirect
+
+        # Agar direct redirect nahi mila to HTML parse karo
+        soup = BeautifulSoup(response.text, "lxml")
+
+        # Meta Refresh Handling
+        meta_refresh = soup.find("meta", attrs={"http-equiv": "refresh"})
+        if meta_refresh:
+            content = meta_refresh.get("content", "")
+            url_part = content.split("url=")[-1] if "url=" in content else None
+            if url_part:
+                return url_part.strip()
+
+        # JavaScript Redirect Handling
+        script = soup.find("script", text=lambda x: x and "window.location" in x)
+        if script:
+            match = re.search(r'window\.location\s*=\s*['"](.*?)['"]', script.text)
+            if match:
+                return match.group(1)
+
+        # Agar kuch bhi na mile to original URL return karo
+        return short_url
+
+    except requests.exceptions.RequestException as e:
+        return f"An error occurred: {e}"
+
         
         # If it's a direct redirect, return the final URL
         if response.status_code in (301, 302, 303, 307, 308):
