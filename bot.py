@@ -38,7 +38,7 @@ def bypass_url_shortener(short_url):
         # JavaScript Redirect Handling
         script = soup.find("script", text=lambda x: x and "window.location" in x)
         if script:
-            match = re.search(r'window\.location\s*=\s*['"](.*?)['"]', script.text)
+            match = re.search(r'window\.location\s*=\s*["\'](.*?)["\']', script.text)
             if match:
                 return match.group(1)
 
